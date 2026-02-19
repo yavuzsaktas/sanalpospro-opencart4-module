@@ -51,7 +51,7 @@
 												{% set total_amount = sanalpospro_price %}
 												{% set monthly_payment = total_amount / installment_count %}
 											{% else %}
-												{% set total_amount = sanalpospro_price * (1 + rate.buyer_fee_percent / 100) %}
+												{% set total_amount = (sanalpospro_price * 100) / (100 - rate.buyer_fee_percent) %}
 												{% set monthly_payment = total_amount / installment_count %}
 											{% endif %}
 											<td class="modern-monthly-payment">

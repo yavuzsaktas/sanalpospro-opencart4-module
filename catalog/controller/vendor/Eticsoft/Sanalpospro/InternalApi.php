@@ -262,7 +262,7 @@ class InternalApi
             }
 
             $shippingAddress = EticTools::getSessionData('shipping_address');
-            $paymentAddress =  EticTools::getSessionData('payment_address');
+            $paymentAddress = EticTools::getSessionData('payment_address');
 
             if (empty($shippingAddress) && empty($paymentAddress)) {
                 $shippingAddress['address_1'] = 'test';
@@ -275,7 +275,7 @@ class InternalApi
                 $shippingAddress['telephone'] = '5000000000';
                 $paymentAddress = $shippingAddress;
             } else if (empty($shippingAddress)) {
-                $shippingAddress =  $paymentAddress;
+                $shippingAddress = $paymentAddress;
             } else if (empty($paymentAddress)) {
                 $paymentAddress = $shippingAddress;
             }
@@ -291,13 +291,13 @@ class InternalApi
             $payment->setBuyerFee(0);
             $payment->setMethod('creditcard');
             $payment->setMerchantReference($order_id);
-            $baseUrl = EticTools::getLink('extension/sanalpospro/api/sanalposproiapi');
-            $params = [
-                'action' => 'orderConfirmation',
-                'nonce' => $this->xfvv
-            ];
-            $returnUrl = $baseUrl . '&' . http_build_query($params);
-            $payment->setReturnUrl($returnUrl);
+            /*             $baseUrl = EticTools::getLink('extension/sanalpospro/api/sanalposproiapi');
+                        $params = [
+                            'action' => 'orderConfirmation',
+                            'nonce' => $this->xfvv
+                        ];
+                        $returnUrl = $baseUrl . '&' . http_build_query($params);
+                        $payment->setReturnUrl($returnUrl); */
 
             $payerAddress = new Address();
             $payerAddress->setLine1($paymentAddress->address_1);
