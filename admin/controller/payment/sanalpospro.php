@@ -136,23 +136,26 @@ class Sanalpospro extends \Opencart\System\Engine\Controller
         $order_id = $this->request->get['order_id'];
         $this->load->model('sale/order');
         $order = $this->model_sale_order->getOrder($order_id);
-        if (empty($order) || $order['payment_method']['code'] != 'sanalpospro.sanalpospro' || $order['payment_method']['code'] != 'sanalpospro') {
+        if (empty($order) || ($order['payment_method']['code'] != 'sanalpospro.sanalpospro' && $order['payment_method']['code'] != 'sanalpospro')) {
             return;
         }
 
         $order_history = $this->model_sale_order->getHistories($order_id);
-        $last_history = [];
-        if (!empty($order_history)) {
-            $last_history = $order_history[0];
+        $sanalpospro_history = null;
+        foreach ($order_history as $history) {
+            if (strpos($history['comment'], 'SanalPOS PRO') !== false) {
+                $sanalpospro_history = $history;
+                break;
+            }
         }
-        if (empty($last_history) || !strpos($last_history['comment'], 'SanalPOS PRO')) {
+        if (empty($sanalpospro_history)) {
             return;
         }
         $transaction_id = '';
-        if (!empty($last_history['comment'])) {
-            $comment_parts = explode(' ', trim($last_history['comment']));
-            $transaction_id = end($comment_parts);
+        if (preg_match('/SanalPOS PRO\s+(\S+)/', $sanalpospro_history['comment'], $matches)) {
+            $transaction_id = $matches[1];
         }
+
         try {
             if (empty($transaction_id)) {
                 return;
