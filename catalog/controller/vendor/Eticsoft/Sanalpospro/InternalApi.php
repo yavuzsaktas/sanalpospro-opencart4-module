@@ -43,6 +43,7 @@ class InternalApi
 
     ];
     public ?string $xfvv = '';
+    public bool $isCallback = false;
     public function run(): self
     {
         $this->setAction()->setParams()->setXfvv()->call();
@@ -116,7 +117,7 @@ class InternalApi
             'meta' => $meta
         ];
 
-        if ($status != 'success') {
+        if ($status != 'success' && $status != 'warning') {
             unset($this->response['data']);
         }
 
@@ -240,7 +241,7 @@ class InternalApi
                     'SHP-1',
                     'Kargo Ücreti',
                     'shipping',
-                    EticTools::getAmountCurrencyFormated($shipping_cost),
+                    $shipping_cost,
                     1
                 );
                 $cartModel->addItem($shippingItem);
@@ -291,13 +292,15 @@ class InternalApi
             $payment->setBuyerFee(0);
             $payment->setMethod('creditcard');
             $payment->setMerchantReference($order_id);
-            /*             $baseUrl = EticTools::getLink('extension/sanalpospro/api/sanalposproiapi');
-                        $params = [
-                            'action' => 'orderConfirmation',
-                            'nonce' => $this->xfvv
-                        ];
-                        $returnUrl = $baseUrl . '&' . http_build_query($params);
-                        $payment->setReturnUrl($returnUrl); */
+            $baseUrl = EticTools::getLink('extension/sanalpospro/api/sanalposproiapi');
+/*             $payment->setReturnUrl($baseUrl . '&' . http_build_query([
+                'action' => 'orderConfirmation',
+                'nonce' => $this->xfvv
+            ])); */
+            $payment->setCallbackUrl($baseUrl . '&' . http_build_query([
+                'action' => 'callback',
+                'nonce' => $this->xfvv
+            ]));
 
             $payerAddress = new Address();
             $payerAddress->setLine1($paymentAddress->address_1);
@@ -351,6 +354,7 @@ class InternalApi
             $paymentRequest->setPayer($payer);
             $paymentRequest->setOrder($order);
 
+            EticTools::saveOrderSessionId($order_id);
             $result = Payment::createPayment($paymentRequest->toArray());
 
             $this->response = $result;
@@ -363,14 +367,41 @@ class InternalApi
 
     private function actionConfirmOrder(): self
     {
+        $order_id = (int) EticTools::getOrderId();
+        if (!$order_id) {
+            $redirect_url = EticTools::getLink('checkout/failure');
+            $this->setResponse('warning', 'Order confirmation failed', [
+                'redirect_url' => $redirect_url
+            ]);
+            return $this;
+        }
+
+        $db = EticTools::getDb();
+        $lockName = 'sanalpospro_confirm_' . $order_id;
+        $lockResult = $db->query("SELECT GET_LOCK('" . $db->escape($lockName) . "', 10) AS locked");
+        $locked = !empty($lockResult->row['locked']);
+
+        if (!$locked) {
+            $this->setResponse('error', 'Order confirmation in progress');
+            return $this;
+        }
+
         try {
+            if (EticTools::isOrderPaid($order_id)) {
+                $redirect_url = EticTools::getLink('checkout/success');
+                $this->setResponse('success', 'Order already confirmed', [
+                    'redirect_url' => $redirect_url
+                ]);
+                return $this;
+            }
+
             $order = EticTools::getOrder();
             $process_token = $this->params['process_token'];
             $res = Payment::validatePayment($process_token);
 
             if ($res['status'] != 'success') {
                 $redirect_url = EticTools::getLink('checkout/failure');
-                $this->setResponse('error', 'Order confirmation failed', [], [
+                $this->setResponse('warning', 'Order confirmation failed', [], [
                     'redirect_url' => $redirect_url
                 ]);
                 return $this;
@@ -381,10 +412,17 @@ class InternalApi
 
             if ($data['status'] == 'completed' && $processData['process_status'] == 'completed') {
                 $transaction_amount = $processData['amount'];
+                $order_currency = $order['currency_code'];
 
-                EticTools::addOrderHistory($processData['payment_token']);
-                if (floatval($transaction_amount) > floatval(EticTools::getAmountCurrencyFormated($order['total']))) {
-                    EticTools::addCommissionFeeToTotal(EticTools::getOrderId(), floatval($transaction_amount) - EticTools::getAmountCurrencyFormated($order['total']));
+                $commission_fee = floatval($transaction_amount) - EticTools::getAmountCurrencyFormated($order['total'], $order_currency);
+ 
+                EticTools::addOrderHistory($processData['payment_token'], $this->isCallback);
+                if ($commission_fee > 0) {
+                    EticTools::addCommissionFeeToTotal(EticTools::getOrderId(), $commission_fee, $order_currency);
+                }
+
+                if ($this->isCallback) {
+                    EticTools::clearCartByOrderId($order_id);
                 }
 
                 $redirect_url = EticTools::getLink('checkout/success');
@@ -394,17 +432,19 @@ class InternalApi
                 return $this;
             } else {
                 $redirect_url = EticTools::getLink('checkout/failure');
-                $this->setResponse('error', 'Order confirmation failed', [
+                $this->setResponse('warning', 'Order confirmation failed', [
                     'redirect_url' => $redirect_url
                 ]);
                 return $this;
             }
         } catch (\Exception $e) {
             $redirect_url = EticTools::getLink('checkout/failure');
-            $this->setResponse('error', 'Order confirmation failed', [
+            $this->setResponse('warning', 'Order confirmation failed', [
                 'redirect_url' => $redirect_url
             ]);
             return $this;
+        } finally {
+            $db->query("SELECT RELEASE_LOCK('" . $db->escape($lockName) . "')");
         }
     }
 
@@ -434,7 +474,7 @@ class InternalApi
             $data = [
                 'store' => [
                     'name' => EticTools::getConfigData('config_name'),
-                    'url' => EticTools::getConfigData('site_url'),
+                    'url' => empty(HTTP_CATALOG) ? EticTools::getConfigData('site_url') : HTTP_CATALOG,
                     'admin_email' => EticTools::getConfigData('config_email'),
                     'phone' => EticTools::getConfigData('config_telephone'),
                     'address' => [

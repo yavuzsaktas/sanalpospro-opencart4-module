@@ -1,0 +1,46 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# PHP
+vendor/
+composer.phar
+composer.lock
+.phpunit.result.cache
+.php-cs-fixer.cache
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Logs & cache
+*.log
+logs/
+cache/
+tmp/
+temp/
+
+# Archives & build artifacts
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+# OS / misc
+Thumbs.db
+ehthumbs.db
+Desktop.ini
